@@ -1,0 +1,28 @@
+{
+  "analysis_id": "20250512_174604",
+  "timestamp": "2025-05-12T17:50:42.356997",
+  "t_test": {
+    "statistic": -17.242819224674797,
+    "p_value": 1.4662848584001489e-19,
+    "significant": true
+  },
+  "mann_whitney_u": {
+    "statistic": 0.0,
+    "p_value": 7.717598690277236e-09,
+    "significant": true
+  },
+  "effect_size": {
+    "cohens_d": 5.5943092778551575,
+    "interpretation": "large"
+  },
+  "confidence_intervals": {
+    "no_eavesdropping_95ci": [
+      NaN,
+      NaN
+    ],
+    "with_eavesdropping_95ci": [
+      0.22843983300785248,
+      0.29156016699214754
+    ]
+  }
+}
