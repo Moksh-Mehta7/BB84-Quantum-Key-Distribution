@@ -18,9 +18,6 @@ This project implements and analyzes the BB84 quantum key distribution protocol 
 - **Alen Siby** (S4851488)
 - **Neah Sunny** (S4851587)
 
-## AI Assistance Disclosure
-
-**Note**: AI was used to assist with code debugging, optimization, and implementation guidance throughout this project. All core concepts, algorithm design, and analysis methodology were developed by the team members.
 
 
 ## Prerequisites
@@ -252,6 +249,10 @@ This project is developed for educational purposes only.
 - **Qiskit Team**: For the excellent quantum computing framework
 - **BB84 Creators**: Bennett and Brassard for the foundational protocol
 - **AI Assistance**: Claude (Anthropic) and Chatgpt was used for code debugging, optimization, and implementation guidance
+
+## AI Assistance Disclosure
+
+**Note**: AI was used to assist with code debugging, optimization, and implementation guidance throughout this project. All core concepts, algorithm design, and analysis methodology were developed by the team members.
 
 ## Contact
 
