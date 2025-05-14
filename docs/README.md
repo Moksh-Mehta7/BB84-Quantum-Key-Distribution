@@ -22,6 +22,40 @@ This project implements and analyzes the BB84 quantum key distribution protocol 
 
 **Note**: AI was used to assist with code debugging, optimization, and implementation guidance throughout this project. All core concepts, algorithm design, and analysis methodology were developed by the team members.
 
+
+## Prerequisites
+
+**Docker** is required to run this project.
+
+### Installation
+
+Download Docker from: https://docs.docker.com/get-docker/
+
+#### Quick Install Commands:
+
+**Ubuntu/Debian:**
+```bash
+sudo apt update
+sudo apt install docker.io
+sudo systemctl start docker
+sudo systemctl enable docker
+```
+
+**CentOS/RHEL:**
+```bash
+sudo yum install docker
+sudo systemctl start docker
+sudo systemctl enable docker
+```
+
+**Windows/macOS:**
+Install Docker Desktop from the link above.
+
+### Verify Installation
+```bash
+docker --version
+```
+
 ## Features
 
 ### Core Protocol Implementation
