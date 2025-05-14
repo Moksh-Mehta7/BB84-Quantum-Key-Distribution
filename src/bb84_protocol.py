@@ -6,11 +6,13 @@ import json
 import os
 from datetime import datetime
 import pandas as pd
+import hashlib
+from typing import List, Tuple, Dict, Any
 
 class BB84Protocol:
     def __init__(self, n_bits=100, save_results=True, results_dir='../results'):
         """
-        Initialize BB84 protocol
+        Initialize BB84 protocol with error correction and privacy amplification
         
         Args:
             n_bits: Number of bits to transmit
@@ -144,14 +146,138 @@ class BB84Protocol:
         qber = errors / len(sample_indices)
         return qber
     
-    def run_protocol(self, with_eve=False, eve_strategy='intercept_resend', save_detailed=False):
+    def simple_error_correction(self, alice_key: List[int], bob_key: List[int], 
+                               qber: float) -> Tuple[List[int], List[int], Dict]:
         """
-        Run the complete BB84 protocol
+        Simple error correction using parity check method
+        
+        Args:
+            alice_key: Alice's sifted key
+            bob_key: Bob's sifted key  
+            qber: Quantum bit error rate
+            
+        Returns:
+            Corrected keys for Alice and Bob, and correction statistics
+        """
+        if len(alice_key) == 0:
+            return [], [], {'errors_corrected': 0, 'parity_checks': 0}
+        
+        alice_corrected = alice_key.copy()
+        bob_corrected = bob_key.copy()
+        errors_corrected = 0
+        parity_checks = 0
+        
+        # Simple parity check error correction
+        # Divide key into blocks and check parity
+        block_size = max(4, int(16 / max(qber, 0.01)))  # Adaptive block size based on QBER
+        
+        for i in range(0, len(alice_key), block_size):
+            block_end = min(i + block_size, len(alice_key))
+            
+            # Calculate parity for both keys
+            alice_parity = sum(alice_key[i:block_end]) % 2
+            bob_parity = sum(bob_key[i:block_end]) % 2
+            parity_checks += 1
+            
+            # If parities don't match, there's an error in this block
+            if alice_parity != bob_parity:
+                # Find the error using binary search approach
+                # For simplicity, just flip the first differing bit
+                for j in range(i, block_end):
+                    if alice_key[j] != bob_key[j]:
+                        bob_corrected[j] = alice_key[j]
+                        errors_corrected += 1
+                        break
+        
+        return alice_corrected, bob_corrected, {
+            'errors_corrected': errors_corrected,
+            'parity_checks': parity_checks,
+            'block_size': block_size
+        }
+    
+    def privacy_amplification(self, key: List[int], qber: float, 
+                            eve_info_estimate: float = None) -> Tuple[List[int], Dict]:
+        """
+        Privacy amplification using universal hash functions
+        
+        Args:
+            key: Input key after error correction
+            qber: Quantum bit error rate
+            eve_info_estimate: Estimate of information leaked to Eve
+            
+        Returns:
+            Shortened secure key and amplification statistics
+        """
+        if len(key) == 0:
+            return [], {'key_compression_ratio': 0, 'eve_info_estimate': 0}
+        
+        # Estimate information leaked to Eve based on QBER
+        if eve_info_estimate is None:
+            # Conservative estimate: assume Eve gets 1 bit of info per error
+            # Plus some additional information from basis reconciliation
+            eve_info_estimate = min(qber * len(key) + 0.1 * len(key), len(key) * 0.5)
+        
+        # Calculate secure key length using entropy formula
+        # Secure length = original length - leaked info - security parameter
+        security_parameter = max(10, int(0.1 * len(key)))  # Security parameter (typically 100-200 bits)
+        secure_length = max(1, int(len(key) - eve_info_estimate - security_parameter))
+        
+        # Use universal hash function (simple implementation)
+        # In practice, this would use proper universal hash families
+        hashed_key = self._universal_hash(key, secure_length)
+        
+        compression_ratio = secure_length / len(key) if len(key) > 0 else 0
+        
+        return hashed_key, {
+            'original_length': len(key),
+            'secure_length': secure_length,
+            'eve_info_estimate': eve_info_estimate,
+            'security_parameter': security_parameter,
+            'key_compression_ratio': compression_ratio
+        }
+    
+    def _universal_hash(self, key: List[int], output_length: int) -> List[int]:
+        """
+        Simple universal hash function implementation
+        
+        Args:
+            key: Input bit string
+            output_length: Desired output length
+            
+        Returns:
+            Hashed key of specified length
+        """
+        # Convert bit list to byte string
+        key_str = ''.join(map(str, key))
+        
+        # Use multiple hash iterations to get required length
+        hashed_bits = []
+        seed = 0
+        
+        while len(hashed_bits) < output_length:
+            # Create hash with different seed each iteration
+            hash_input = f"{key_str}{seed}".encode()
+            hash_result = hashlib.sha256(hash_input).hexdigest()
+            
+            # Convert hex to binary
+            binary_str = bin(int(hash_result, 16))[2:].zfill(256)
+            hashed_bits.extend([int(b) for b in binary_str])
+            seed += 1
+        
+        return hashed_bits[:output_length]
+    
+    def run_protocol(self, with_eve=False, eve_strategy='intercept_resend', 
+                    save_detailed=False, enable_error_correction=True, 
+                    enable_privacy_amplification=True):
+        """
+        Run the complete BB84 protocol with error correction and privacy amplification
         
         Args:
             with_eve: Whether to simulate eavesdropping
             eve_strategy: Type of eavesdropping attack
             save_detailed: Whether to save detailed step-by-step results
+            enable_error_correction: Whether to perform error correction
+            enable_privacy_amplification: Whether to perform privacy amplification
         
         Returns:
             Dictionary with protocol results
@@ -173,13 +299,40 @@ class BB84Protocol:
         bob_bases = [random.randint(0, 1) for _ in range(self.n_bits)]
         bob_measurements = self.bob_measure_qubits(circuits, bob_bases)
         
-        # Step 5: Basis reconciliation
+        # Step 5: Basis reconciliation (sifting)
         alice_sifted, bob_sifted = self.sift_key(alice_bits, alice_bases, 
                                                 bob_bases, bob_measurements)
         
         # Step 6: Calculate QBER
         qber = self.calculate_qber(alice_sifted, bob_sifted, 
                                   sample_size=min(50, len(alice_sifted)//2))
+        
+        # Initialize keys for further processing
+        alice_corrected = alice_sifted
+        bob_corrected = bob_sifted
+        error_correction_stats = {}
+        privacy_amplification_stats = {}
+        
+        # Step 7: Error Correction (if enabled and needed)
+        if enable_error_correction and len(alice_sifted) > 0:
+            alice_corrected, bob_corrected, error_correction_stats = \
+                self.simple_error_correction(alice_sifted, bob_sifted, qber)
+        
+        # Step 8: Privacy Amplification (if enabled)
+        final_alice_key = alice_corrected
+        final_bob_key = bob_corrected
+        
+        if enable_privacy_amplification and len(alice_corrected) > 0:
+            # Apply privacy amplification to Alice's key
+            final_alice_key, privacy_amplification_stats = \
+                self.privacy_amplification(alice_corrected, qber)
+            
+            # Bob applies the same hash function (in practice, Alice would share the hash function)
+            final_bob_key, _ = self.privacy_amplification(bob_corrected, qber)
+        
+        # Step 9: Final security check
+        final_qber = self.calculate_qber(final_alice_key, final_bob_key) if len(final_alice_key) > 0 else 0
+        is_secure = final_qber <= 0.11 and len(final_alice_key) > 0
         
         # Compile results
         results = {
@@ -188,12 +341,35 @@ class BB84Protocol:
             'n_bits': self.n_bits,
             'with_eve': with_eve,
             'eve_strategy': eve_strategy if with_eve else None,
+            
+            # Sifting results
             'alice_sifted_key': alice_sifted,
             'bob_sifted_key': bob_sifted,
-            'qber': qber,
             'sifted_key_length': len(alice_sifted),
+            'sifting_rate': len(alice_sifted) / self.n_bits,
+            'qber_after_sifting': qber,
+            
+            # Error correction results
+            'error_correction_enabled': enable_error_correction,
+            'error_correction_stats': error_correction_stats,
+            'alice_corrected_key': alice_corrected,
+            'bob_corrected_key': bob_corrected,
+            
+            # Privacy amplification results
+            'privacy_amplification_enabled': enable_privacy_amplification,
+            'privacy_amplification_stats': privacy_amplification_stats,
+            
+            # Final results
+            'final_alice_key': final_alice_key,
+            'final_bob_key': final_bob_key,
+            'final_key_length': len(final_alice_key),
+            'final_qber': final_qber,
+            'overall_key_rate': len(final_alice_key) / self.n_bits,
+            'secure': is_secure,
+            
+            # Legacy fields for backward compatibility
             'key_rate': len(alice_sifted) / self.n_bits,
-            'secure': qber <= 0.11 if len(alice_sifted) > 0 else False
+            'qber': qber
         }
         
         # Save detailed results if requested
